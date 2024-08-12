@@ -1,0 +1,5 @@
+-- Daftar HWID yang diwhitelist
+local whitelistedHWIDs = {
+    "Hwid1", -- Ganti dengan HWID yang di-whitelist
+    "hwid2"
+}
