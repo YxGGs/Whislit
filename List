@@ -1,5 +1,6 @@
 -- Daftar HWID yang diwhitelist
 whitelistedHWIDs = {
-    "95a7bcf4-a0fc-4ac2-9bc3-6c199258a2d6", -- Ganti dengan HWID yang di-whitelist
+    "sigma", -- Ganti dengan HWID yang di-whitelist
     "hwid2"
 }
+dont skid kidddos
