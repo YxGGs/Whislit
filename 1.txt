@@ -1,0 +1,327 @@
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+-- GUI Utama
+local mainGui = Instance.new("ScreenGui")
+mainGui.Name = "MainWallhopGui"
+mainGui.Parent = CoreGui
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 120, 0, 80)
+mainFrame.Position = UDim2.new(0, 20, 0, 20)
+mainFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+mainFrame.BackgroundTransparency = 0.4
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = mainGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 8)
+mainCorner.Parent = mainFrame
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.new(0, 0, 0)
+mainStroke.Thickness = 2
+mainStroke.Parent = mainFrame
+
+local mainTitle = Instance.new("TextLabel")
+mainTitle.Size = UDim2.new(0, 120, 0, 20)
+mainTitle.Position = UDim2.new(0, 0, 0, 5)
+mainTitle.BackgroundTransparency = 1
+mainTitle.Text = "Made by sxc_qq1"
+mainTitle.TextColor3 = Color3.new(1, 1, 1)
+mainTitle.TextScaled = true
+mainTitle.Parent = mainFrame
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 15, 0, 15)
+closeBtn.Position = UDim2.new(1, -15, 0, 0) -- Adjusted position to fit inside frame
+closeBtn.BackgroundColor3 = Color3.new(1, 0, 0)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.new(1, 1, 1)
+closeBtn.TextScaled = true
+closeBtn.Parent = mainFrame
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 4)
+closeCorner.Parent = closeBtn
+
+local iconFrame = Instance.new("TextButton")
+iconFrame.Size = UDim2.new(0, 30, 0, 30)
+iconFrame.Position = mainFrame.Position
+iconFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+iconFrame.BackgroundTransparency = 0.9
+iconFrame.BorderSizePixel = 0
+iconFrame.Active = true
+iconFrame.Draggable = true
+iconFrame.Visible = false
+iconFrame.Text = ""
+iconFrame.Parent = mainGui
+
+local iconCorner = Instance.new("UICorner")
+iconCorner.CornerRadius = UDim.new(0, 8)
+iconCorner.Parent = iconFrame
+
+local iconStroke = Instance.new("UIStroke")
+iconStroke.Color = Color3.new(1, 1, 1)
+iconStroke.Thickness = 2
+iconStroke.Parent = iconFrame
+
+local iconLabel = Instance.new("TextLabel")
+iconLabel.Size = UDim2.new(1, 0, 1, 0)
+iconLabel.BackgroundTransparency = 1
+iconLabel.Text = "+"
+iconLabel.TextColor3 = Color3.new(1, 1, 1)
+iconLabel.TextScaled = true
+iconLabel.Parent = iconFrame
+
+-- Tombol Movement Flick
+local function createBtn(name, pos)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0, 100, 0, 30)
+    button.Position = pos
+    button.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.TextScaled = true
+    button.Text = name
+    button.Parent = mainFrame
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = button
+
+    local btnStroke = Instance.new("UIStroke")
+    btnStroke.Color = Color3.new(0.5, 0.5, 0.5)
+    btnStroke.Thickness = 2
+    btnStroke.Parent = button
+
+    return button
+end
+
+local vertBtn = createBtn("Movement flick: OFF", UDim2.new(0, 10, 0, 40))
+
+-- References
+local player = Players.LocalPlayer
+local char = player.Character or player.CharacterAdded:Wait()
+local human = char:WaitForChild("Humanoid")
+local root = char:WaitForChild("HumanoidRootPart")
+local cam = workspace.CurrentCamera
+
+-- State variables
+local vertActive = false
+local hopTimer = 0
+local isWallhopping = false
+local lastHopTime = 0
+local freefallStartTime = 0
+
+-- Refresh character on respawn
+local function refreshChar()
+    char = player.Character or player.CharacterAdded:Wait()
+    human = char:WaitForChild("Humanoid")
+    root = char:WaitForChild("HumanoidRootPart")
+end
+
+player.CharacterAdded:Connect(refreshChar)
+
+human.StateChanged:Connect(function(oldState, newState)
+    if newState == Enum.HumanoidStateType.Freefall then
+        freefallStartTime = tick()
+    end
+end)
+
+-- Utility: blacklist all player characters
+local function getPlayerBlacklist()
+    local list = {}
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr.Character then
+            table.insert(list, plr.Character)
+        end
+    end
+    return list
+end
+
+-- Enhanced Raycast for walls
+local function detectWall(dir, offset, distance)
+    local origin = root.Position + (offset or Vector3.new(0, 0, 0))
+    local dirVec = dir * (distance or 0.01)
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = getPlayerBlacklist()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    return workspace:Raycast(origin, dirVec, params)
+end
+
+-- Multi-direction wall normal detection
+local function getWallNormal()
+    local dirs = {
+        root.CFrame.LookVector,
+        root.CFrame.RightVector,
+        -root.CFrame.RightVector,
+        root.CFrame.LookVector + root.CFrame.RightVector,
+        root.CFrame.LookVector - root.CFrame.RightVector,
+        -root.CFrame.LookVector,
+    }
+    for _, d in ipairs(dirs) do
+        local res = detectWall(d, nil, 5)
+        if res then
+            return res.Normal, d
+        end
+    end
+    return nil, nil
+end
+
+-- Detect platform covered by a ceiling
+local function detectCoveredPlatform()
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = getPlayerBlacklist()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+
+    local floorOrigin = root.Position + Vector3.new(0, 1, 0)
+    local floorRes = workspace:Raycast(floorOrigin, Vector3.new(0, -5, 0), params)
+    if floorRes then
+        local coverRes = workspace:Raycast(floorRes.Position, Vector3.new(0, 1, 0), params)
+        if coverRes then
+            return true, floorRes, coverRes
+        end
+    end
+    return false
+end
+
+-- Modified Wallhop rotation & jump (removed lock to wall)
+local function vertTurn()
+    local normal, hitDir = getWallNormal()
+    if normal then
+        local orig = -normal
+        local angle = math.acos(normal:Dot(-hitDir)) - math.pi/2
+        -- Just apply the rotation without locking to wall
+        root.CFrame = root.CFrame * CFrame.Angles(0, angle, 0)
+        task.wait(0.075)
+    end
+end
+
+local function vertJump()
+    if human:GetState() == Enum.HumanoidStateType.Freefall then
+        isWallhopping = true
+        lastHopTime = tick()
+        vertTurn()
+        human.Jump = true
+        hopTimer = tick() + 0.1
+        task.wait(0.075)
+    end
+end
+
+-- GUI Close/Minimize
+local zoomInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local isMinimized = false
+
+closeBtn.MouseButton1Click:Connect(function()
+    if not isMinimized then
+        mainFrame.Visible = false
+        iconFrame.Position = mainFrame.Position
+        iconFrame.Visible = true
+        TweenService:Create(iconFrame, zoomInfo, {Size = UDim2.new(0, 30, 0, 30)}):Play()
+        isMinimized = true
+    end
+end)
+
+iconFrame.MouseButton1Click:Connect(function()
+    if isMinimized then
+        iconFrame.Visible = false
+        mainFrame.Position = iconFrame.Position
+        mainFrame.Visible = true
+        TweenService:Create(mainFrame, zoomInfo, {Size = UDim2.new(0, 120, 0, 80)}):Play()
+        isMinimized = false
+    end
+end)
+
+-- Main Loop: detect & execute wallhop
+RunService.RenderStepped:Connect(function()
+    if tick() < hopTimer then return end
+
+    if isWallhopping then
+        if human:GetState() ~= Enum.HumanoidStateType.Freefall or (tick() - lastHopTime > 0.7) then
+            isWallhopping = false
+        end
+    end
+
+    local front = detectWall(root.CFrame.LookVector, Vector3.new(0, 1, 0), 2)
+    local fallSpeed = root.Velocity.Y
+    if vertActive and front and front.Distance < 3 and fallSpeed < -4 and (tick() - freefallStartTime > 0.2) then
+        vertJump()
+    end
+
+    local covered, floorRes, coverRes = detectCoveredPlatform()
+    if vertActive and covered then
+        vertTurn()
+        if human:GetState() == Enum.HumanoidStateType.Freefall then
+            human.Jump = true
+            hopTimer = tick() + 0.01
+        end
+    end
+end)
+
+-- Toggle Movement Flick
+vertBtn.MouseButton1Click:Connect(function()
+    vertActive = not vertActive
+    if vertActive then
+        vertBtn.Text = "Movement flick: ON"
+        TweenService:Create(vertBtn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.new(0, 1, 0)}):Play()
+    else
+        vertBtn.Text = "Movement flick: OFF"
+        TweenService:Create(vertBtn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)}):Play()
+    end
+end)
+
+-- Buat ScreenGui dan TextLabel
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local function createTiktokLabel()
+    -- Hapus jika sudah ada
+    if playerGui:FindFirstChild("TiktokLabelGui") then
+        playerGui.TiktokLabelGui:Destroy()
+    end
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "TiktokLabelGui"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = playerGui
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Name = "TiktokLabel"
+    textLabel.Parent = screenGui
+    textLabel.Text = "TikTok:@yxorisk"
+    textLabel.TextColor3 = Color3.fromRGB(200, 100, 255) -- ungu lebih terang
+    textLabel.TextSize = 16
+    textLabel.BackgroundTransparency = 1
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.Size = UDim2.new(0, 200, 0, 30)
+    textLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+    textLabel.Position = UDim2.new(0.5, 0, 0.55, 0)
+
+    -- Tambahkan efek stroke putih agar terlihat lebih bercahaya
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.new(1, 1, 1) -- putih
+    stroke.Thickness = 1.5
+    stroke.Transparency = 0
+    stroke.Parent = textLabel
+end
+
+-- Tampilkan label pertama kali
+createTiktokLabel()
+
+-- Respawn handler
+player.CharacterAdded:Connect(function()
+    wait(1)
+    createTiktokLabel()
+end)
+
+game.StarterGui:SetCore("SendNotification", {
+    Title = "Yx.GGs";
+    Text = "for update: https://discord.com/invite/cMzPqDGwRV";
+    Duration = 8;
+})
